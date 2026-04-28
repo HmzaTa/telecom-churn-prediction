@@ -17,7 +17,7 @@ Together they form a complete retention intelligence system, the network tells y
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 customer-churn-prediction/
@@ -66,7 +66,7 @@ customer-churn-prediction/
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Install dependencies
 
@@ -108,7 +108,7 @@ Then open `network/telco_risk_network.html` in any browser.
 
 ---
 
-## 🤖 Machine Learning App
+## Machine Learning App
 
 ### What it Does
 
