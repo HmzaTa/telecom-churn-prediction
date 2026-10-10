@@ -24,6 +24,9 @@ reports/
 
 network/telco_risk_network.html
 
+.pytest_cache/
+.ruff_cache/
+
 .DS_Store
 Thumbs.db
 desktop.ini

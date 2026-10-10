@@ -1,0 +1,15 @@
+.git
+.github
+__pycache__
+*.pyc
+.venv
+.pytest_cache
+.ruff_cache
+data
+models
+notebooks
+network
+reports
+visualization
+app
+tests

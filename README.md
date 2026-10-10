@@ -1,355 +1,195 @@
 # Telecom Customer Churn Prediction
 
-A complete, production-quality machine learning system that predicts customer churn for a telecommunications company, combining a real-time prediction application with an interactive customer risk network visualization.
+An end-to-end machine learning project that predicts which telecom customers are likely to cancel their subscription. It includes a reproducible training pipeline, a Streamlit app, a FastAPI prediction service (with Docker), an automated test suite with CI, and an interactive customer risk network.
 
----
+![CI](https://github.com/HmzaTa/customer-churn-prediction/actions/workflows/ci.yml/badge.svg)
 
-## Project Overview
+> Update the badge URL above to match your repository name, or delete the line.
 
-Customer churn occurs when a customer stops using a company's service. Identifying at-risk customers **before** they leave is significantly cheaper than acquiring new ones. This project addresses that problem from two complementary angles:
+## Project overview
+
+Customer churn is when a customer stops using a service. Finding at-risk customers before they leave is cheaper than acquiring new ones. This project approaches the problem from two angles:
 
 | Tool | Level | Question it answers |
-|------|-------|-------------------|
-| **ML Prediction App** | Individual | *What is the probability THIS specific customer will churn?* |
-| **Risk Network Graph** | Population | *Which customer segments are at risk and who do they look like?* |
+|---|---|---|
+| ML model (Streamlit app, API, CLI) | Individual | What is the probability that *this* customer will churn? |
+| Risk network graph | Population | Which customer segments are at risk, and who do they look like? |
 
-Together they form a complete retention intelligence system, the network tells you **where to look**, the model tells you **who to call**.
+## Results
 
----
+Dataset: [Telco Customer Churn (Kaggle)](https://www.kaggle.com/datasets/blastchar/telco-customer-churn), 7,043 customers and 21 columns.
 
-## Project Structure
+| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
+|---|---|---|---|---|---|
+| **Logistic Regression** (selected) | 80.4% | 66.4% | 52.7% | 58.8% | **0.8398** |
+| Random Forest | 79.6% | 65.4% | 49.2% | 56.1% | 0.8394 |
+| Gradient Boosting | 78.7% | 62.6% | 48.7% | 54.8% | 0.8375 |
+
+All metrics are on a held-out, stratified 20% test set (1,405 customers) at the default 0.5 decision threshold. The model with the highest ROC-AUC is selected. Exact accuracy and recall can shift by about 0.002 between scikit-learn versions; ROC-AUC for Logistic Regression is stable at 0.8398.
+
+Logistic Regression won, which suggests the churn signal in this dataset is largely linear. The three models are within 0.003 ROC-AUC of each other, so the simplest one is also the easiest to explain and serve.
+
+## How the pipeline works
 
 ```
-customer-churn-prediction/
-│
-├── data/
-│   ├── raw/
-│   │   └── WA_Fn-UseC_-Telco-Customer-Churn.csv   ← Kaggle dataset
-│   └── processed/
-│       └── telco_processed.csv                      ← After preprocessing
-│
-├── src/
-│   ├── data_preprocessing.py    ← Loading, cleaning, encoding, scaling
-│   ├── feature_engineering.py   ← Feature creation
-│   ├── train_model.py           ← Training pipeline (main entry point)
-│   ├── evaluate_model.py        ← Metrics, ROC curves, confusion matrix
-│   ├── predict.py               ← CLI prediction tool
-│   └── generate_report.py       ← HTML report generator
-│
-├── network/
-│   ├── telco_risk_network.py    ← Network graph script
-│   ├── telco_nodes.csv          ← Customer segment nodes
-│   ├── telco_edges.csv          ← Behavioural similarity edges
-│   └── telco_risk_network.html  ← Generated interactive network
-│
-├── visualization/
-│   ├── plots.py                 ← EDA visualization functions
-│   └── output/                  ← Generated PNG plots
-│
-├── models/
-│   └── churn_model.pkl          ← Saved model bundle
-│
-├── app/
-│   └── streamlit_app.py         ← Interactive web application
-│
-├── notebooks/
-│   ├── 01_eda.ipynb             ← Exploratory data analysis
-│   ├── 02_feature_engineering.ipynb  ← Feature engineering walkthrough
-│   └── 03_model_training.ipynb  ← Model training and evaluation
-│
-├── reports/
-│   └── model_report.html        ← Auto-generated performance report
-│
-├── requirements.txt
-└── README.md
+Raw data (7,043 rows, 21 columns)
+  -> Cleaning: drop customerID, fill 11 blank TotalCharges with 0 (new customers),
+               encode target, drop 22 duplicate rows  ->  7,021 rows
+  -> Feature engineering: 5 new features
+       AverageChargePerMonth, TenureGroup_encoded (New / Medium / Long),
+       HasProtection, NumAddonServices, ChargePerService
+  -> Encoding: Yes/No columns -> 0/1, multi-category columns -> one-hot  ->  46 features
+  -> Stratified 80/20 split (5,616 train / 1,405 test, random_state=42)
+  -> StandardScaler on 4 continuous columns, fit on the training set only
+  -> Train and compare 3 models, select by ROC-AUC, save the bundle to models/churn_model.pkl
 ```
 
----
+The saved bundle contains the model, the fitted scaler and the feature list, so inference applies exactly the same transformations as training.
 
-## Quick Start
+**Models**
+- Logistic Regression: `C=1.0`, `max_iter=1000`
+- Random Forest: 200 trees, `max_depth=10`, `min_samples_leaf=5`
+- Gradient Boosting: 200 trees, `max_depth=4`, `learning_rate=0.05`, `subsample=0.8`. If XGBoost is installed, an `XGBClassifier` with similar settings is used in its place, so numbers can differ slightly from the table above.
 
-### 1. Install dependencies
+## What drives churn
+
+Churn rates measured on the raw dataset (overall 26.5%):
+
+| Segment | Churn rate |
+|---|---|
+| Month-to-month contract | 42.7% |
+| One-year contract | 11.3% |
+| Two-year contract | 2.8% |
+| Tenure of 12 months or less | 47.4% (vs 17.1% for longer tenure) |
+| Monthly charges above $70 | 35.4% (vs 17.4% at or below $70) |
+| Fiber optic internet | 41.9% (vs 19.0% for DSL) |
+| No Online Security / no Tech Support | about 42% (vs about 15% with the service) |
+
+Month-to-month customers churn about 4 times as often as one-year customers and about 15 times as often as two-year customers.
+
+## Quick start
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Add the dataset
+1. Download the dataset from Kaggle and place it at `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
+   If the file is missing, the training script generates a synthetic demo dataset instead, and the results will be much weaker. Do not report metrics from synthetic data.
+2. Train and save the model:
+   ```bash
+   python src/train_model.py
+   ```
+3. Launch the Streamlit app:
+   ```bash
+   streamlit run app/streamlit_app.py
+   ```
 
-Download from Kaggle: https://www.kaggle.com/datasets/blastchar/telco-customer-churn
-
-Place the CSV at:
-```
-data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv
-```
-
-> **Note:** If the file is not present, the pipeline automatically generates a synthetic dataset for demonstration purposes — though results will be significantly weaker than with the real data.
-
-### 3. Train the model
-
-```bash
-python src/train_model.py
-```
-
-### 4. Launch the app
+Other tools:
 
 ```bash
-streamlit run app/streamlit_app.py
+python src/predict.py --examples                                   # three example customers
+python src/predict.py --input data/new_customers.csv --output data/predictions.csv   # batch
+python src/generate_report.py                                      # HTML performance report
 ```
 
-### 5. Generate the network graph (optional)
+## Prediction API (FastAPI)
+
+The API loads the saved model once at startup and validates every request with Pydantic (allowed categories, non-negative numbers, no unknown fields).
 
 ```bash
-cd network
-python telco_risk_network.py
+pip install -r requirements-api.txt
+uvicorn api.main:app --reload
 ```
 
-Then open `network/telco_risk_network.html` in any browser.
+Open http://localhost:8000/docs for interactive Swagger documentation, or call it directly:
 
----
-
-## Machine Learning App
-
-### What it Does
-
-An end-to-end machine learning system that takes a telecom customer's profile as input and outputs the probability that this customer will cancel their subscription, along with a risk label and personalized retention recommendations.
-
-### The Pipeline
-
-```
-Raw Data (7,043 customers, 21 columns)
-        ↓
-Data Cleaning
-→ Remove customerID (non-predictive)
-→ Fix TotalCharges empty strings (100 new customers with tenure = 0)
-→ Encode target: Yes → 1, No → 0
-        ↓
-Feature Engineering (5 new features created)
-→ AverageChargePerMonth  = TotalCharges / tenure
-→ TenureGroup            = New (0–12m) / Medium (13–36m) / Long (36m+)
-→ HasProtection          = 1 if OnlineSecurity or TechSupport = Yes
-→ NumAddonServices       = count of 6 optional services subscribed
-→ ChargePerService       = MonthlyCharges / (NumAddonServices + 1)
-        ↓
-Encoding + Scaling
-→ Binary columns (Yes/No) → Label Encoding (0/1)
-→ Multi-category columns  → One-Hot Encoding
-→ 20 features → 46 features after encoding
-→ StandardScaler on continuous columns (mean=0, std=1)
-        ↓
-Train / Test Split
-→ 80% training (5,634 customers)
-→ 20% testing  (1,409 customers)
-→ Stratified — preserves 26% churn rate in both sets
-→ random_state=42 — fully reproducible
-        ↓
-Model Training & Selection
-→ Three algorithms trained and evaluated
-→ Winner selected by ROC-AUC
-→ Saved to models/churn_model.pkl
-        ↓
-Deployment
-→ Streamlit web application
-→ Real-time predictions on new customer profiles
-```
-
-### The Three Models
-
-**Logistic Regression — Linear Model**
-
-Computes a weighted linear combination of all 46 features (Z score), passes it through the sigmoid function to produce a probability between 0 and 1, then minimizes binary cross-entropy loss through iterative weight optimization until convergence.
-
-```
-Z = β₀ + β₁x₁ + β₂x₂ + ... + β₄₆x₄₆
-P(Churn) = 1 / (1 + e⁻ᶻ)
-```
-
-**Random Forest — Parallel Ensemble**
-
-200 decision trees each trained on a different bootstrap sample of customers, considering a random subset of features at each split. Final prediction = average probability across all 200 trees. Individual tree errors cancel out through averaging.
-
-**Gradient Boosting — Sequential Ensemble**
-
-200 decision trees built one after another, each tree specifically corrects the residuals (errors) of the previous one. Starts with a naive baseline prediction and stacks 200 targeted corrections with a learning rate of 0.05.
-
-```
-Final probability = baseline + Σ(learning_rate × tree_correction)
-```
-
-### Model Results
-
-| Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
-|-------|----------|-----------|--------|----|---------|
-| **Logistic Regression** | **80.4%** | **66.4%** | **52.7%** | **58.8%** | **0.8398 ✓** |
-| Random Forest | 79.6% | 65.4% | 49.2% | 56.1% | 0.8394 |
-| Gradient Boosting | 78.7% | 62.6% | 48.7% | 54.8% | 0.8375 |
-
-**Selection criterion: ROC-AUC** — measures whether the model consistently assigns higher churn probabilities to customers who actually churn. A score of 0.84 means that given one customer who churned and one who didn't, the model correctly ranks the churner as higher risk 84% of the time.
-
-Logistic Regression won, the simplest model outperformed both ensemble methods. This indicates the churn patterns in this dataset are sufficiently linear that a simple decision boundary captures them effectively. **Data quality matters more than algorithmic complexity.**
-
-### Key Churn Drivers
-
-Based on feature importance analysis:
-
-- **Contract type** — month-to-month customers churn 3–4× more than two-year contract holders
-- **Tenure** — customers in their first 12 months are the highest-risk segment
-- **Monthly charges** — above $70/month significantly increases churn probability
-- **Internet service** — fiber optic users churn more than DSL users
-- **Support services** — customers without TechSupport or OnlineSecurity are more likely to leave
-
-### Streamlit App Features
-
-- **Predict Churn** — fill in 18 customer attributes, get an instant churn probability with risk gauge and retention recommendations
-- **EDA Visualizations** — all charts generated during training
-- **About** — project overview and model information
-
-### CLI Tools
-
-**Interactive single prediction:**
 ```bash
-python src/predict.py
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d @api/example_customer.json
 ```
 
-**Batch prediction from CSV:**
+```json
+{"churn_probability": 0.757, "prediction": "High Risk", "threshold": 0.5}
+```
+
+| Endpoint | Description |
+|---|---|
+| `GET /health` | `200` when the model is loaded, `503` otherwise |
+| `POST /predict` | Churn probability and risk label for one customer. Optional `?threshold=0.4` sets the probability at which a customer counts as High Risk. `TotalCharges` is optional and defaults to `MonthlyCharges x tenure`. |
+
+Invalid input (an unknown contract type, a negative tenure, a missing field) returns `422`.
+
+## Docker
+
+The image contains only the code needed for inference. The trained model is mounted at run time, not baked into the image.
+
 ```bash
-python src/predict.py --input data/new_customers.csv --output data/predictions.csv
+docker build -t churn-api .
+
+# Linux / macOS / Git Bash
+docker run -p 8000:8000 -v "$(pwd)/models:/app/models:ro" churn-api
+
+# Windows PowerShell
+docker run -p 8000:8000 -v "${PWD}/models:/app/models:ro" churn-api
 ```
 
-**Example profiles:**
+The model file is a pickle, so the scikit-learn version in the image must match the one used for training. Check yours with `pip show scikit-learn` and pin it in `requirements-api.txt` if the container reports a version warning.
+
+## Tests and CI
+
 ```bash
-python src/predict.py --examples
+pip install -r requirements-dev.txt
+pytest -q
+ruff check api src/inference.py tests
 ```
 
-**Generate HTML report:**
-```bash
-python src/generate_report.py
-```
+The 25 tests cover feature engineering, cleaning, scaler leakage (the scaler is fit on training data only), a stratified split, feature alignment for unseen categories, threshold behaviour, agreement between the API code and the original CLI code, and every API path including validation errors and a missing model. The tests build a small model from the project's synthetic data generator, so they need neither the Kaggle file nor the real model.
 
----
+GitHub Actions (`.github/workflows/ci.yml`) runs lint and tests on every push and builds the Docker image.
 
 ## Customer Risk Network
 
-### What it Does
+An interactive network of 48 behavioural customer segments, built with pyvis and NetworkX.
 
-Visualizes the entire customer base as an interactive network of 48 behavioral segments — showing which segments are at risk and how risk propagates between behaviorally similar groups.
-
-### How it Works
-
-**Nodes :** each node is a customer segment defined by 4 attributes:
-- Contract type (Month-to-month / One year / Two year)
-- Internet service (DSL / Fiber optic / No)
-- Tenure group (Short / Medium / Long)
-- Churn status (Active / Churned)
-
-Node size is proportional to segment population. The largest segment contains 637 customers.
-
-**Edges :** connections between segments are computed using **cosine similarity** on 7 behavioral features: average monthly charge, average tenure, number of add-on services, protection rate, senior citizen rate, partner rate and dependent rate. Only the top 3 most similar neighbors per segment are connected, giving 99 edges total. This is a k-nearest-neighbor graph.
-
-**Color :** a continuous composite risk score between 0 and 1:
-```
-Risk = 0.40 × churn status
-     + 0.25 × contract risk
-     + 0.20 × tenure risk
-     + 0.15 × normalised monthly charge
-```
-Color gradient runs from deep blue (low risk) through teal → gold → orange to deep red (critical risk).
-
-**Layout :** deliberate risk axis:
-- X-axis → risk score (low risk left, high risk right)
-- Y-axis → average tenure (short tenure bottom, long tenure top)
-
-The most dangerous segments — high risk and short tenure — cluster in the top-right corner. The safest segments cluster in the bottom-left.
-
-### Running the Network
+- **Nodes:** segments defined by contract type, internet service, tenure group and churn status. Node size is the segment population.
+- **Edges:** cosine similarity on 7 behavioural features, keeping the 3 most similar neighbours per segment (99 edges).
+- **Colour:** a composite risk score from 0 to 1 combining churn status, contract, tenure and monthly charge.
 
 ```bash
 cd network
 pip install pyvis networkx scipy
-python telco_risk_network.py
+python telco_risk_network.py   # then open telco_risk_network.html
 ```
 
-Open `telco_risk_network.html` in any browser. Hover over any node or edge for full details.
-
-### Key Insight from the Network
-
-The highest-risk segment — Month-to-month, Fiber optic, Short tenure, Churned — contains **637 customers** with a risk score of **0.97**. Critically, this segment has thick edges connecting it to active segments with similar behavioral profiles — meaning there are current customers who look almost identical to confirmed churners. Those are the highest-priority retention targets.
-
----
-
-## EDA Visualizations
-
-Generated automatically during training and saved to `visualization/output/`:
-
-| File | Content |
-|------|---------|
-| `01_churn_distribution.png` | Overall churn rate — bar + pie chart |
-| `02_churn_by_contract.png` | Churn rate by contract type |
-| `03_churn_vs_monthly_charges.png` | Monthly charges KDE + box plot by churn |
-| `04_churn_vs_tenure.png` | Tenure distribution by churn status |
-| `05_correlation_heatmap.png` | Top 15 feature correlations |
-| `06_churn_by_internet_service.png` | Churn rate by internet service type |
-| `roc_curves_comparison.png` | ROC curves for all three models |
-| `*_feature_importance.png` | Top 20 feature importances for best model |
-
----
-
-## Workflow
+## Project structure
 
 ```
-First time only:
-    python src/train_model.py          ← trains and saves model
-
-Every time after:
-    streamlit run app/streamlit_app.py ← loads saved model, no retraining
-
-Optional:
-    python src/predict.py --examples   ← CLI predictions
-    python src/generate_report.py      ← HTML performance report
-    python network/telco_risk_network.py ← regenerate network graph
+api/                    FastAPI service (main.py, example_customer.json)
+app/streamlit_app.py    Streamlit web app
+src/
+  data_preprocessing.py   loading, cleaning, encoding, scaling, splitting
+  feature_engineering.py  engineered features
+  train_model.py          training pipeline (entry point)
+  evaluate_model.py       metrics and plots
+  inference.py            lightweight prediction code shared by the API and tests
+  predict.py              command-line predictions
+  generate_report.py      HTML report
+tests/                  pytest suite
+network/                risk network script and outputs
+notebooks/              EDA, feature engineering, model training
+visualization/output/   generated plots
+models/                 saved model bundle
+Dockerfile, requirements*.txt, ruff.toml, .github/workflows/ci.yml
 ```
 
-The model is fully deterministic, `random_state=42` is set throughout. Running `train_model.py` multiple times produces identical results.
+## Known limitations
 
----
+- **Recall is 52.7% at the default 0.5 threshold:** the model catches about half of the customers who churn. Lowering the threshold raises recall at the cost of precision. The right value depends on what a retention offer costs compared with a lost customer, and the API accepts a custom threshold.
+- **Model selection uses the test set:** the best model is chosen by test-set ROC-AUC, and hyperparameters are set by hand (no tuning, no cross-validation). The three models are very close, so the effect is small, but a nested or cross-validated comparison would be cleaner.
+- **Duplicate rows are dropped after `customerID` is removed:** 22 rows that are identical on every feature are treated as duplicates, even though they could be different customers.
+- **Single-record API:** there is no batch endpoint (use `python src/predict.py --input ...` for batches), and the API does not check cross-field consistency (for example, internet add-ons for a customer with no internet service).
+- **Static training insights:** the "key business insights" printed at the end of `train_model.py` are fixed text, not computed from the data. Use the table above for measured rates.
+- **Public dataset:** the Telco dataset is a well-known sample, so this project demonstrates the engineering workflow, not a business deployment.
 
-## Tech Stack
+## Tech stack
 
-| Library | Purpose |
-|---------|---------|
-| `pandas` | Data manipulation |
-| `numpy` | Numerical computation |
-| `scikit-learn` | ML models, preprocessing, evaluation |
-| `matplotlib` | Plots and visualizations |
-| `seaborn` | Statistical visualizations |
-| `joblib` | Model serialization |
-| `streamlit` | Interactive web application |
-| `pyvis` | Interactive network visualization |
-| `networkx` | Network graph construction |
-| `scipy` | Cosine similarity computation |
-
----
-
-## Requirements
-
-Python 3.10+ recommended (tested on Python 3.12.10 and 3.14).
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Business Insights
-
-1. **Month-to-month contracts** are the single strongest churn predictor — customers with no long-term commitment have no financial reason to stay
-2. **The first 12 months are critical** — new customers who don't build loyalty early are the highest-risk segment
-3. **Fiber optic + high charges + no support services** is the most dangerous combination
-4. **Two-year contract customers** have a churn probability below 5% — contract upgrades are the most impactful retention lever
-5. **The simplest model won** — Logistic Regression outperformed both ensemble methods, confirming that clean real-world data produces strong linear signals that don't require complex modeling
-
----
-
-## License
-
-MIT License — free for personal and commercial use.
+pandas, NumPy, scikit-learn, (optional) XGBoost, matplotlib, seaborn, joblib, Streamlit, FastAPI, Pydantic, Uvicorn, pytest, ruff, Docker, GitHub Actions, pyvis, NetworkX, SciPy.

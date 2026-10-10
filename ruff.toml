@@ -1,0 +1,9 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I"]
+
+[lint.per-file-ignores]
+# tests add src/ to sys.path before importing project modules
+"tests/*" = ["E402"]
