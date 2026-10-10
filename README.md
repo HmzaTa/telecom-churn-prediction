@@ -2,9 +2,7 @@
 
 An end-to-end machine learning project that predicts which telecom customers are likely to cancel their subscription. It includes a reproducible training pipeline, a Streamlit app, a FastAPI prediction service (with Docker), an automated test suite with CI, and an interactive customer risk network.
 
-![CI](https://github.com/HmzaTa/customer-churn-prediction/actions/workflows/ci.yml/badge.svg)
-
-> Update the badge URL above to match your repository name, or delete the line.
+![CI](https://github.com/HmzaTa/telecom-churn-prediction/actions/workflows/ci.yml/badge.svg)
 
 ## Project overview
 
@@ -76,13 +74,13 @@ pip install -r requirements.txt
 1. Download the dataset from Kaggle and place it at `data/raw/WA_Fn-UseC_-Telco-Customer-Churn.csv`.
    If the file is missing, the training script generates a synthetic demo dataset instead, and the results will be much weaker. Do not report metrics from synthetic data.
 2. Train and save the model:
-   ```bash
+```bash
    python src/train_model.py
-   ```
+```
 3. Launch the Streamlit app:
-   ```bash
+```bash
    streamlit run app/streamlit_app.py
-   ```
+```
 
 Other tools:
 
